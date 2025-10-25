@@ -228,7 +228,14 @@ async function hashPassword(password: string): Promise<string> {
 
 async function createTenant(config: typeof TENANT_CONFIGS[0]) {
   console.log(`Creating tenant: ${config.name}`);
-  
+
+  // Check if tenant already exists
+  const existingTenant = await db.select().from(tenants).where({ slug: config.slug }).get();
+  if (existingTenant) {
+    console.log(`   ⚠️ Tenant "${config.name}" already exists, skipping creation.`);
+    return existingTenant.id; // return existing tenant ID
+  }
+
   // Insert tenant
   const [tenant] = await db.insert(tenants).values({
     name: config.name,
