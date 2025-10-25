@@ -86,16 +86,23 @@ export async function attemptDatabaseRecovery(): Promise<boolean> {
  */
 export function startDatabaseHealthMonitoring(intervalMs: number = 30000): NodeJS.Timeout {
   console.log(`Starting database health monitoring (interval: ${intervalMs}ms)`);
-  
+
   return setInterval(async () => {
     try {
+      // Check if pool is still open
+      if (pool.ended) {
+        console.warn('Database pool has ended, skipping health check.');
+        return;
+      }
+
       const health = await checkDatabaseHealth();
-      
+
       if (!health.isHealthy) {
         console.warn(`Database health check failed: ${health.error}`);
-        
+
         // Attempt recovery for connection issues
         if (health.error?.includes('connection') || health.error?.includes('termination')) {
+          console.log('Attempting database recovery...');
           await attemptDatabaseRecovery();
         }
       }
@@ -104,6 +111,7 @@ export function startDatabaseHealthMonitoring(intervalMs: number = 30000): NodeJ
     }
   }, intervalMs);
 }
+
 
 /**
  * Creates a database health endpoint handler
