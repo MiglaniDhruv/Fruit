@@ -1,28 +1,11 @@
 import { db } from './db';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { 
   tenants, 
-  users, 
-  vendors, 
-  items, 
-  bankAccounts, 
-  retailers, 
-  expenseCategories,
-  purchaseInvoices,
-  invoiceItems,
-  payments,
-  stock,
-  stockMovements,
-  salesInvoices,
-  salesInvoiceItems,
-  salesPayments,
-  crateTransactions,
-  expenses,
-  cashbook,
-  bankbook
+  users
 } from '../shared/schema';
 import { ROLE_PERMISSIONS } from '../shared/permissions';
-import { ensureTenantInsert, withTenant } from './src/utils/tenant-scope';
+import { ensureTenantInsert } from './src/utils/tenant-scope';
 import { LedgerModel } from './src/modules/ledgers/model';
 import bcrypt from 'bcrypt';
 
@@ -64,8 +47,8 @@ const TENANT_CONFIGS = [
         lowCreditThreshold: 100,
         scheduler: {
           enabled: true,
-          preferredSendHour: 9, // 9 AM
-          reminderFrequency: 'daily', // Send reminders every day
+          preferredSendHour: 9,
+          reminderFrequency: 'daily',
           sendOnWeekends: true,
         },
         defaultTemplates: {
@@ -112,9 +95,9 @@ const TENANT_CONFIGS = [
         lowCreditThreshold: 50,
         scheduler: {
           enabled: true,
-          preferredSendHour: 10, // 10 AM
-          reminderFrequency: 'weekly', // Send reminders once per week (Mondays)
-          sendOnWeekends: false, // Don't send on weekends
+          preferredSendHour: 10,
+          reminderFrequency: 'weekly',
+          sendOnWeekends: false,
         },
         defaultTemplates: {
           paymentReminder: 'Hi {vendorName}, gentle reminder about payment of ₹{amount} for invoice {invoiceNumber}. Thank you!',
@@ -159,9 +142,9 @@ const TENANT_CONFIGS = [
         creditBalance: 100,
         lowCreditThreshold: 25,
         scheduler: {
-          enabled: false, // Disabled by default for new tenant
-          preferredSendHour: 14, // 2 PM
-          reminderFrequency: 'monthly', // Send reminders once per month (1st of month)
+          enabled: false,
+          preferredSendHour: 14,
+          reminderFrequency: 'monthly',
           sendOnWeekends: true,
         },
         defaultTemplates: {
@@ -174,73 +157,28 @@ const TENANT_CONFIGS = [
   }
 ];
 
-// User configurations for each tenant
+// User configurations
 const USER_CONFIGS = [
   { role: 'Admin', email: 'admin@{domain}', name: 'Admin User', permissions: ROLE_PERMISSIONS.Admin },
   { role: 'Operator', email: 'operator@{domain}', name: 'Operations Manager', permissions: ROLE_PERMISSIONS.Operator },
   { role: 'Accountant', email: 'accounts@{domain}', name: 'Account Manager', permissions: ROLE_PERMISSIONS.Accountant }
 ];
 
-// Sample vendor data templates
-const VENDOR_TEMPLATES = [
-  { name: 'Green Valley Farms', specialty: 'Seasonal Fruits', phone: '+91-9876501001' },
-  { name: 'Fresh Harvest Co', specialty: 'Citrus Fruits', phone: '+91-9876501002' },
-  { name: 'Organic Growers Ltd', specialty: 'Organic Produce', phone: '+91-9876501003' },
-  { name: 'Mountain Fresh Supplies', specialty: 'Apples & Pears', phone: '+91-9876501004' },
-  { name: 'Tropical Fruit Traders', specialty: 'Exotic Fruits', phone: '+91-9876501005' }
-];
-
-// Sample item data templates
-const ITEM_TEMPLATES = [
-  { name: 'Apple - Shimla', category: 'Fruits', unit: 'KG', quality: 'Premium' },
-  { name: 'Orange - Nagpur', category: 'Fruits', unit: 'KG', quality: 'Standard' },
-  { name: 'Banana - Robusta', category: 'Fruits', unit: 'Dozen', quality: 'Premium' },
-  { name: 'Mango - Alphonso', category: 'Fruits', unit: 'KG', quality: 'Premium' },
-  { name: 'Grapes - Green', category: 'Fruits', unit: 'KG', quality: 'Standard' },
-  { name: 'Pomegranate', category: 'Fruits', unit: 'KG', quality: 'Premium' },
-  { name: 'Watermelon', category: 'Fruits', unit: 'KG', quality: 'Standard' },
-  { name: 'Pineapple', category: 'Fruits', unit: 'Piece', quality: 'Standard' }
-];
-
-// Sample retailer templates
-const RETAILER_TEMPLATES = [
-  { name: 'City Fresh Mart', type: 'Supermarket', creditLimit: 50000 },
-  { name: 'Local Fruit Shop', type: 'Retail', creditLimit: 15000 },
-  { name: 'Wholesale Distributors', type: 'Wholesale', creditLimit: 100000 },
-  { name: 'Organic Store Chain', type: 'Premium', creditLimit: 75000 }
-];
-
-// Expense categories
-const EXPENSE_CATEGORIES = [
-  'Transportation',
-  'Labour Charges',
-  'Market Fees',
-  'Storage Rent',
-  'Office Expenses',
-  'Utilities',
-  'Insurance',
-  'Maintenance'
-];
-
+// Password hashing function
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
-import { eq } from "drizzle-orm"; // make sure to import eq
-
+// Create tenant
 async function createTenant(config: typeof TENANT_CONFIGS[0]) {
   console.log(`Creating tenant: ${config.name}`);
 
+  const existingTenants = await db.select().from(tenants).where(eq(tenants.slug, config.slug));
+  if (existingTenants.length > 0) {
+    console.log(`   ⚠️ Tenant "${config.name}" already exists, skipping creation.`);
+    return existingTenants[0].id;
+  }
 
-const existingTenants = await db.select().from(tenants).where(eq(tenants.slug, config.slug));
-
-if (existingTenants.length > 0) {
-  console.log(`   ⚠️ Tenant "${config.name}" already exists, skipping creation.`);
-  return existingTenants[0].id; // use the first tenant’s id
-}
-
-
-  // Insert tenant
   const [tenant] = await db.insert(tenants).values({
     name: config.name,
     slug: config.slug,
@@ -248,7 +186,6 @@ if (existingTenants.length > 0) {
     isActive: true
   }).returning({ id: tenants.id });
 
-  // Create cashbook opening entry if cashBalance is set
   if (config.settings.cashBalance) {
     const cashBalance = parseFloat(config.settings.cashBalance);
     if (cashBalance > 0) {
@@ -260,16 +197,18 @@ if (existingTenants.length > 0) {
   return tenant.id;
 }
 
+// Create tenant users
 async function createTenantUsers(tenantId: string, config: typeof TENANT_CONFIGS[0]) {
   console.log(`Creating users for tenant: ${config.name}`);
-  
+
   const domain = config.slug.replace('-', '') + '.com';
   const createdUsers = [];
-  
+
   for (const userConfig of USER_CONFIGS) {
     const username = userConfig.email.replace('{domain}', domain);
+
     const hashedPassword = await hashPassword('password123');
-    
+
     const [user] = await db.insert(users).values(
       ensureTenantInsert({
         tenantId,
@@ -281,13 +220,84 @@ async function createTenantUsers(tenantId: string, config: typeof TENANT_CONFIGS
         isActive: true
       }, tenantId)
     ).returning({ id: users.id, username: users.username, role: users.role });
-    
+
     createdUsers.push(user);
   }
-  
+
   return createdUsers;
 }
 
+// Seed all tenants
+async function seedTenantData() {
+  console.log('🌱 Starting tenant data seeding...\n');
+
+  try {
+    for (const config of TENANT_CONFIGS) {
+      console.log(`\n📋 Processing tenant: ${config.name} (${config.slug})`);
+      console.log(`   Scenario: ${config.scenario}`);
+      console.log('   ─────────────────────────────────────────');
+
+      const tenantId = await createTenant(config);
+      console.log(`   ✅ Tenant created with ID: ${tenantId}`);
+
+      const users = await createTenantUsers(tenantId, config);
+      console.log(`   ✅ Created ${users.length} users`);
+
+      console.log(`   🎉 Completed setup for ${config.name}\n`);
+    }
+
+    console.log('\n🎊 Tenant data seeding completed successfully!');
+    console.log('\n🔑 All users have password: password123');
+
+  } catch (error) {
+    console.error('❌ Error seeding tenant data:', error);
+    throw error;
+  }
+}
+
+// Run the script if executed directly
+if (import.meta.url.endsWith(process.argv[1])) {
+  seedTenantData()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Fatal error:', error);
+      process.exit(1);
+    });
+}
+
+export { seedTenantData };
+
+
+
+
+
+ // // Create vendors
+      // const vendors = await createTenantVendors(tenantId, config.scenario);
+      // console.log(`   ✅ Created ${vendors.length} vendors`);
+      
+      // // Create items
+      // const items = await createTenantItems(tenantId, config.scenario);
+      // console.log(`   ✅ Created ${items.length} items`);
+      
+      // // Create bank accounts
+      // const bankAccounts = await createTenantBankAccounts(tenantId, config.scenario);
+      // console.log(`   ✅ Created ${bankAccounts.length} bank accounts`);
+      
+      // // Create retailers
+      // const retailers = await createTenantRetailers(tenantId, config.scenario);
+      // console.log(`   ✅ Created ${retailers.length} retailers`);
+      
+      // // Create expense categories
+      // const expenseCategories = await createTenantExpenseCategories(tenantId);
+      // console.log(`   ✅ Created ${expenseCategories.length} expense categories`);
+      
+      // // Create comprehensive transactional data
+      // await createTransactionalData(tenantId, config.scenario, vendors, items, bankAccounts, retailers, expenseCategories);
+      // console.log(`   ✅ Created comprehensive transactional data`);
+  
+  
+  
+  
 
 // async function createTenantVendors(tenantId: string, scenario: string) {
 //   console.log(`Creating vendors for tenant scenario: ${scenario}`);
@@ -878,73 +888,3 @@ async function createTenantUsers(tenantId: string, config: typeof TENANT_CONFIGS
 //   console.log(`   ✅ Created stock movements and current stock levels`);
 //   console.log(`   ✅ Created cashbook and bankbook entries`);
 // }
-
-async function seedTenantData() {
-  console.log('🌱 Starting comprehensive tenant data seeding...\n');
-  
-  try {
-    for (const config of TENANT_CONFIGS) {
-      console.log(`\n📋 Processing tenant: ${config.name} (${config.slug})`);
-      console.log(`   Scenario: ${config.scenario}`);
-      console.log('   ─────────────────────────────────────────');
-      
-      // Create tenant
-      const tenantId = await createTenant(config);
-      console.log(`   ✅ Tenant created with ID: ${tenantId}`);
-      
-      // Create users
-      const users = await createTenantUsers(tenantId, config);
-      console.log(`   ✅ Created ${users.length} users`);
-      
-      // // Create vendors
-      // const vendors = await createTenantVendors(tenantId, config.scenario);
-      // console.log(`   ✅ Created ${vendors.length} vendors`);
-      
-      // // Create items
-      // const items = await createTenantItems(tenantId, config.scenario);
-      // console.log(`   ✅ Created ${items.length} items`);
-      
-      // // Create bank accounts
-      // const bankAccounts = await createTenantBankAccounts(tenantId, config.scenario);
-      // console.log(`   ✅ Created ${bankAccounts.length} bank accounts`);
-      
-      // // Create retailers
-      // const retailers = await createTenantRetailers(tenantId, config.scenario);
-      // console.log(`   ✅ Created ${retailers.length} retailers`);
-      
-      // // Create expense categories
-      // const expenseCategories = await createTenantExpenseCategories(tenantId);
-      // console.log(`   ✅ Created ${expenseCategories.length} expense categories`);
-      
-      // // Create comprehensive transactional data
-      // await createTransactionalData(tenantId, config.scenario, vendors, items, bankAccounts, retailers, expenseCategories);
-      // console.log(`   ✅ Created comprehensive transactional data`);
-      
-      console.log(`   🎉 Completed setup for ${config.name}\n`);
-    }
-    
-    console.log('\n🎊 Tenant data seeding completed successfully!');
-    console.log('\n📖 Available test tenants:');
-    console.log('   • Mumbai Fruit Market (mumbai-fruits) - Established business');
-    console.log('   • Pune Fresh Produce (pune-fresh) - Growing business');
-    console.log('   • Nashik Organic Hub (nashik-organic) - New business');
-    console.log('\n🔑 All users have password: password123');
-    console.log('\n🌐 Access via: http://localhost:5000/{tenant-slug}');
-    
-  } catch (error) {
-    console.error('❌ Error seeding tenant data:', error);
-    throw error;
-  }
-}
-
-// Run the seeding if this script is executed directly
-if (import.meta.url.endsWith(process.argv[1])) {
-  seedTenantData()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error('Fatal error:', error);
-      process.exit(1);
-    });
-}
-
-export { seedTenantData };
