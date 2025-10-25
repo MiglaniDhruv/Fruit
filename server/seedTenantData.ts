@@ -226,15 +226,19 @@ async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
+import { eq } from "drizzle-orm"; // make sure to import eq
+
 async function createTenant(config: typeof TENANT_CONFIGS[0]) {
   console.log(`Creating tenant: ${config.name}`);
 
-  // Check if tenant already exists
-  const existingTenant = await db.select().from(tenants).where({ slug: config.slug }).get();
-  if (existingTenant) {
-    console.log(`   ⚠️ Tenant "${config.name}" already exists, skipping creation.`);
-    return existingTenant.id; // return existing tenant ID
-  }
+
+const existingTenants = await db.select().from(tenants).where(eq(tenants.slug, config.slug));
+
+if (existingTenants.length > 0) {
+  console.log(`   ⚠️ Tenant "${config.name}" already exists, skipping creation.`);
+  return existingTenants[0].id; // use the first tenant’s id
+}
+
 
   // Insert tenant
   const [tenant] = await db.insert(tenants).values({
@@ -283,6 +287,7 @@ async function createTenantUsers(tenantId: string, config: typeof TENANT_CONFIGS
   
   return createdUsers;
 }
+
 
 // async function createTenantVendors(tenantId: string, scenario: string) {
 //   console.log(`Creating vendors for tenant scenario: ${scenario}`);
