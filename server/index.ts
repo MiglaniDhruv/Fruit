@@ -410,6 +410,7 @@ app.use(asyncHandler(extractTenantSlug));
 server.listen(port, "0.0.0.0", () => {
   log(`🚀 Server running on port ${port}`);
 
+
   // Start database health monitoring after server is up
   startDatabaseHealthMonitoring(30000); // Check every 30 seconds
 });
